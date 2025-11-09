@@ -1,0 +1,284 @@
+
+Hello everyone! 😊 
+
+Myself Dipak, Currently pursuing a BTech in Computer Science and Engineering at PES University. I bring a strong foundation in programming languages and system architecture. With hands-on experience as a Java Web Developer at Passion Software Pvt Ltd, I've honed my skills in building robust web applications. Having recently completed a diploma in computer engineering, I am eager to leverage my expertise to drive innovation. I am committed to continuous learning and staying updated with industry trends. 
+
+Recently, I joined the club and am excited about exploring new areas. Outside of coding, I enjoy playing cricket, and Exploring new things.
+
+Looking forward to getting to know all of you better and collaborating on some amazing projects.
+
+
+-- Trigger to log appointment status changes
+DELIMITER //
+CREATE TRIGGER after_appointment_status_change
+AFTER UPDATE ON APPOINTMENT
+FOR EACH ROW
+BEGIN
+    IF OLD.status != NEW.status THEN
+        INSERT INTO APPOINTMENT_HISTORY (
+            appointment_id,
+            old_status,
+            new_status,
+            changed_at
+        ) VALUES (
+            NEW.appointment_id,
+            OLD.status,
+            NEW.status,
+            NOW()
+        );
+    END IF;
+END//
+
+-- Trigger to create student profile after registration
+CREATE TRIGGER after_student_registration
+AFTER INSERT ON STUDENT
+FOR EACH ROW
+BEGIN
+    INSERT INTO STUDENT_PROFILE (
+        student_id,
+        last_session_date,
+        total_sessions,
+        created_at
+    ) VALUES (
+        NEW.student_id,
+        NULL,
+        0,
+        NOW()
+    );
+END//
+DELIMITER ;
+``` ### 2. STORED PROCEDURES
+```sql
+DELIMITER //
+
+-- Procedure to book an appointment with automatic counselor assignment
+CREATE PROCEDURE BookAppointment(
+    IN p_student_id INT,
+    IN p_preferred_date DATE,
+    IN p_preferred_time TIME,
+    IN p_specialization_id INT
+)
+BEGIN
+    DECLARE v_counselor_id INT;
+    DECLARE v_appointment_id INT;
+    
+    -- Find available counselor with the least appointments on that day
+    SELECT c.counselor_id INTO v_counselor_id
+    FROM COUNSELOR c
+    LEFT JOIN APPOINTMENT a ON c.counselor_id = a.counselor_id 
+        AND DATE(a.appointment_date) = p_preferred_date
+    WHERE c.specialization_id = p_specialization_id
+        AND c.is_available = 1
+    GROUP BY c.counselor_id
+    ORDER BY COUNT(a.appointment_id) ASC
+    LIMIT 1;
+    
+    -- Create the appointment
+    IF v_counselor_id IS NOT NULL THEN
+        INSERT INTO APPOINTMENT (
+            student_id,
+            counselor_id,
+            appointment_date,
+            appointment_time,
+            status,
+            created_at
+        ) VALUES (
+            p_student_id,
+            v_counselor_id,
+            p_preferred_date,
+            p_preferred_time,
+            'pending',
+            NOW()
+        );
+        
+        SET v_appointment_id = LAST_INSERT_ID();
+        
+        -- Return the appointment details
+        SELECT 
+            a.appointment_id,
+            a.appointment_date,
+            a.appointment_time,
+            c.name as counselor_name,
+            a.status
+        FROM APPOINTMENT a
+        JOIN COUNSELOR c ON a.counselor_id = c.counselor_id
+        WHERE a.appointment_id = v_appointment_id;
+    ELSE
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'No available counselor found for the specified specialization';
+    END IF;
+END//
+
+-- Procedure to generate counselor workload report
+CREATE PROCEDURE GenerateCounselorWorkloadReport(
+    IN p_start_date DATE,
+    IN p_end_date DATE
+)
+BEGIN
+    SELECT 
+        c.counselor_id,
+        c.name,
+        s.name as specialization,
+        COUNT(a.appointment_id) as total_appointments,
+        SUM(CASE WHEN a.status = 'completed' THEN 1 ELSE 0 END) as completed_sessions,
+        SUM(CASE WHEN a.status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_sessions,
+        ROUND(AVG(CASE WHEN a.status = 'completed' THEN r.rating ELSE NULL END), 2) as avg_rating
+    FROM COUNSELOR c
+    LEFT JOIN APPOINTMENT a ON c.counselor_id = a.counselor_id 
+        AND a.appointment_date BETWEEN p_start_date AND p_end_date
+    LEFT JOIN SPECIALIZATION s ON c.specialization_id = s.specialization_id
+    LEFT JOIN SESSION_RATING r ON a.appointment_id = r.appointment_id
+    GROUP BY c.counselor_id, c.name, s.name
+    ORDER BY total_appointments DESC;
+END//
+
+DELIMITER ;
+``` ### 3. FUNCTIONS
+```sql
+DELIMITER //
+
+-- Function to calculate counselor's current workload
+CREATE FUNCTION CalculateCounselorWorkload(
+    p_counselor_id INT,
+    p_start_date DATE,
+    p_end_date DATE
+) 
+RETURNS DECIMAL(5,2)
+DETERMINISTIC
+BEGIN
+    DECLARE v_total_hours DECIMAL(5,2);
+    
+    SELECT COUNT(*) / 8.0 INTO v_total_hours
+    FROM APPOINTMENT
+    WHERE counselor_id = p_counselor_id
+    AND appointment_date BETWEEN p_start_date AND p_end_date
+    AND status != 'cancelled';
+    
+    RETURN v_total_hours;
+END//
+
+-- Function to get student's total completed sessions
+CREATE FUNCTION GetStudentSessionCount(
+    p_student_id INT
+) 
+RETURNS INT
+DETERMINISTIC
+BEGIN
+    DECLARE v_session_count INT;
+    
+    SELECT COUNT(*) INTO v_session_count
+    FROM APPOINTMENT
+    WHERE student_id = p_student_id
+    AND status = 'completed';
+    
+    RETURN v_session_count;
+END//
+
+-- Function to calculate counselor rating
+CREATE FUNCTION CalculateCounselorRating(
+    p_counselor_id INT
+) 
+RETURNS DECIMAL(3,2)
+DETERMINISTIC
+BEGIN
+    DECLARE v_avg_rating DECIMAL(3,2);
+    
+    SELECT AVG(r.rating) INTO v_avg_rating
+    FROM APPOINTMENT a
+    JOIN SESSION_RATING r ON a.appointment_id = r.appointment_id
+    WHERE a.counselor_id = p_counselor_id
+    AND a.status = 'completed';
+    
+    RETURN COALESCE(v_avg_rating, 0.00);
+END//
+
+DELIMITER ;
+``` ### 4. COMPLEX SQL QUERIES
+```sql
+-- Query 1: Get comprehensive appointment analytics
+SELECT 
+    d.name AS department,
+    s.name AS specialization,
+    COUNT(DISTINCT a.student_id) as unique_students,
+    COUNT(a.appointment_id) as total_appointments,
+    SUM(CASE WHEN a.status = 'completed' THEN 1 ELSE 0 END) as completed_sessions,
+    SUM(CASE WHEN a.status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_sessions,
+    ROUND(AVG(CASE WHEN a.status = 'completed' THEN r.rating ELSE NULL END), 2) as avg_rating,
+    ROUND(COUNT(CASE WHEN a.status = 'cancelled' THEN 1 END) * 100.0 / COUNT(*), 2) as cancellation_rate
+FROM APPOINTMENT a
+JOIN STUDENT st ON a.student_id = st.student_id
+JOIN COUNSELOR c ON a.counselor_id = c.counselor_id
+JOIN DEPARTMENT d ON st.department_id = d.department_id
+JOIN SPECIALIZATION s ON c.specialization_id = s.specialization_id
+LEFT JOIN SESSION_RATING r ON a.appointment_id = r.appointment_id
+GROUP BY d.name, s.name
+ORDER BY total_appointments DESC;
+
+-- Query 2: Student mental health trend analysis
+SELECT 
+    st.student_id,
+    st.name as student_name,
+    d.name as department,
+    COUNT(a.appointment_id) as total_sessions,
+    MIN(a.appointment_date) as first_session,
+    MAX(a.appointment_date) as last_session,
+    ROUND(AVG(mh.stress_level), 2) as avg_stress_level,
+    ROUND(AVG(mh.anxiety_level), 2) as avg_anxiety_level,
+    STRING_AGG(DISTINCT sp.name, ', ') as specializations_consulted
+FROM STUDENT st
+JOIN DEPARTMENT d ON st.department_id = d.department_id
+JOIN APPOINTMENT a ON st.student_id = a.student_id
+JOIN COUNSELOR c ON a.counselor_id = c.counselor_id
+JOIN SPECIALIZATION sp ON c.specialization_id = sp.specialization_id
+LEFT JOIN MENTAL_HEALTH_ASSESSMENT mh ON a.appointment_id = mh.appointment_id
+WHERE a.status = 'completed'
+GROUP BY st.student_id, st.name, d.name
+HAVING COUNT(a.appointment_id) > 1
+ORDER BY avg_stress_level DESC;
+
+-- Query 3: Counselor performance and availability analysis
+WITH CounselorStats AS (
+    SELECT 
+        c.counselor_id,
+        c.name,
+        s.name as specialization,
+        COUNT(a.appointment_id) as total_appointments,
+        COUNT(DISTINCT a.student_id) as unique_students,
+        ROUND(AVG(CASE WHEN a.status = 'completed' THEN r.rating END), 2) as avg_rating,
+        SUM(CASE WHEN a.status = 'cancelled' THEN 1 ELSE 0 END) as cancellations,
+        c.is_available
+    FROM COUNSELOR c
+    LEFT JOIN APPOINTMENT a ON c.counselor_id = a.counselor_id
+    JOIN SPECIALIZATION s ON c.specialization_id = s.specialization_id
+    LEFT JOIN SESSION_RATING r ON a.appointment_id = r.appointment_id
+    GROUP BY c.counselor_id, c.name, s.name, c.is_available
+)
+SELECT 
+    cs.*,
+    ROUND(cancellations * 100.0 / NULLIF(total_appointments, 0), 2) as cancellation_rate,
+    ROUND(unique_students * 100.0 / NULLIF(total_appointments, 0), 2) as student_retention_rate,
+    RANK() OVER (ORDER BY avg_rating DESC) as rating_rank,
+    RANK() OVER (ORDER BY total_appointments DESC) as workload_rank
+FROM CounselorStats cs
+ORDER BY avg_rating DESC;
+``` These SQL features provide:
+
+1. **Triggers** for:
+   - Logging appointment status changes
+   - Automatic student profile creation
+
+2. **Stored Procedures** for:
+   - Smart appointment booking with counselor assignment
+   - Generating counselor workload reports
+
+3. **Functions** for:
+   - Calculating counselor workload
+   - Tracking student session counts
+   - Computing counselor ratings
+
+4. **Complex Queries** for:
+   - Department-wise appointment analytics
+   - Student mental health trend analysis
+   - Counselor performance metrics
+
+To integrate these into your Next.js application, you'll need to create appropriate API endpoints. Would you like me to help you create the API endpoints to use these SQL features?
