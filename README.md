@@ -70,6 +70,18 @@ npm install
    ```
    This will create all necessary tables and insert sample data.
 
+4. **Apply Database Enhancements** (Triggers, Procedures, Functions):
+   ```bash
+   node lib/db-enhancements.js
+   ```
+   This will install:
+   - 4 Stored Procedures for complex operations
+   - 4 Functions for calculations and validations
+   - 5 Triggers for automatic data management
+   - 3 Additional tables for statistics tracking
+   
+   See [DATABASE_ENHANCEMENTS.md](DATABASE_ENHANCEMENTS.md) for detailed documentation.
+
 ### 3. Environment Variables
 
 Update the `.env.local` file with your database credentials:
@@ -118,6 +130,18 @@ After running the database initialization, you can use these default credentials
 - **RESOURCE**: Educational and mental health resources
 - **NOTIFICATION**: System notifications
 
+### Enhancement Tables (Auto-managed by Triggers)
+- **APPOINTMENT_HISTORY**: Audit trail of all appointment status changes
+- **COUNSELOR_STATS**: Real-time counselor performance statistics
+- **STUDENT_ACTIVITY**: Student engagement and activity tracking
+
+### Database Objects
+- **4 Stored Procedures**: Complex operations like booking with validation
+- **4 Functions**: Rating calculations, session counts, slot availability
+- **5 Triggers**: Automatic statistics updates and audit logging
+
+See [DATABASE_ENHANCEMENTS.md](DATABASE_ENHANCEMENTS.md) for complete documentation.
+
 ## 🎨 Features Implemented
 
 - ✅ Complete authentication system with role-based access
@@ -157,13 +181,29 @@ The application is fully responsive and optimized for:
 
 ## 🔧 API Endpoints
 
+### Authentication
 - `POST /api/auth/login` - User authentication
 - `POST /api/auth/register` - User registration
-- `GET/POST /api/appointments` - Appointment management
+
+### Appointments
+- `GET/POST/PATCH /api/appointments` - Appointment management
+- `POST /api/appointments/validate` - Book with validation (uses stored procedure)
+- `GET /api/appointments/validate` - Check slot availability (uses function)
+- `GET /api/appointments/counselor` - Counselor appointments
+- `GET /api/appointments/student` - Student appointments
+
+### Enhanced Features (Using Database Procedures & Functions)
+- `GET /api/counselor/performance?counselorId=X` - Get counselor statistics
+- `GET /api/student/history?studentId=X` - Get complete student history
+- `POST /api/sessions/complete` - Complete appointment with session
+- `GET /api/stats/functions?type=X&id=Y` - Get calculated statistics
+
+### Other Endpoints
 - `GET /api/counselors/available` - Available counselors
 - `GET /api/notifications` - User notifications
 - `GET /api/departments` - Academic departments
 - `GET /api/specializations` - Counseling specializations
+- `GET /api/admin/stats` - System statistics
 
 ---
 

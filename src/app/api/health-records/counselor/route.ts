@@ -1,6 +1,18 @@
 import { NextResponse } from 'next/server';
 import mysql from 'mysql2/promise';
-import dbConfig from '@/lib/db';
+
+const dbConfig = {
+  host: process.env.DB_HOST || 'localhost',
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || 'root',
+  database: process.env.DB_NAME || 'smhcss_db',
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+  port: 3306,
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0
+};
 
 const pool = mysql.createPool(dbConfig);
 
@@ -11,8 +23,8 @@ export async function GET() {
         mhr.*,
         sp.name as student_name,
         sp.email as student_email
-      FROM mental_health_record mhr
-      JOIN student_profile sp ON mhr.student_id = sp.student_id
+      FROM MENTAL_HEALTH_RECORD mhr
+      JOIN STUDENT sp ON mhr.student_id = sp.student_id
       WHERE mhr.counselor_id = ?
       ORDER BY mhr.created_at DESC
     `, [/* TODO: Get counselor_id from session */1]);
@@ -39,7 +51,7 @@ export async function POST(request: Request) {
     } = await request.json();
 
     const [result] = await pool.execute<mysql.ResultSetHeader>(`
-      INSERT INTO mental_health_record (
+      INSERT INTO MENTAL_HEALTH_RECORD (
         student_id,
         counselor_id,
         assessment,
@@ -84,7 +96,7 @@ export async function PUT(request: Request) {
     } = await request.json();
 
     const [result] = await pool.execute<mysql.ResultSetHeader>(
-      `UPDATE mental_health_record 
+            `UPDATE MENTAL_HEALTH_RECORD 
        SET assessment = ?,
            diagnosis = ?,
            treatment_plan = ?,

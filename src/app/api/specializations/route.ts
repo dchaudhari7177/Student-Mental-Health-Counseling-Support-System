@@ -1,19 +1,29 @@
 import { NextResponse } from 'next/server';
-const { getAllSpecializations } = require('../../../../lib/database-utils.js');
+import mysql from 'mysql2/promise';
+
+const dbConfig = {
+  host: process.env.DB_HOST || 'localhost',
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || 'root',
+  database: process.env.DB_NAME || 'smhcss_db',
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+  port: 3306,
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0
+};
+
+const pool = mysql.createPool(dbConfig);
 
 export async function GET() {
   try {
-    const specializations = await getAllSpecializations();
-    if (!specializations || specializations.length === 0) {
-      console.log('No specializations found');
-      return NextResponse.json([]);
-    }
-    console.log('Fetched specializations:', specializations);
+    const [specializations] = await pool.query('SELECT * FROM SPECIALIZATION ORDER BY name');
     return NextResponse.json(specializations);
   } catch (error) {
     console.error('Error fetching specializations:', error);
     return NextResponse.json(
-      { error: 'Internal server error', details: error.message },
+      { error: 'Failed to fetch specializations' },
       { status: 500 }
     );
   }

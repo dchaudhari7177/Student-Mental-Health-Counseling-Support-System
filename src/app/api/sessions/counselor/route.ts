@@ -1,6 +1,18 @@
 import { NextResponse } from 'next/server';
 import mysql from 'mysql2/promise';
-import dbConfig from '@/lib/db';
+
+const dbConfig = {
+  host: process.env.DB_HOST || 'localhost',
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || 'root',
+  database: process.env.DB_NAME || 'smhcss_db',
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+  port: 3306,
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0
+};
 
 const pool = mysql.createPool(dbConfig);
 
@@ -14,7 +26,7 @@ export async function GET() {
       FROM SESSION s
       JOIN STUDENT sp ON s.student_id = sp.student_id
       WHERE s.counselor_id = ?
-      ORDER BY s.session_date DESC
+      ORDER BY s.start_time DESC
     `, [/* TODO: Get counselor_id from session */1]);
 
     return NextResponse.json(sessions);
@@ -29,25 +41,34 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const { student_id, session_date, notes, diagnosis, recommendations } = await request.json();
+    const { 
+      student_id, 
+      appointment_id,
+      start_time, 
+      end_time, 
+      notes, 
+      follow_up_required 
+    } = await request.json();
 
     const [result] = await pool.execute<mysql.ResultSetHeader>(`
       INSERT INTO SESSION (
         student_id,
         counselor_id,
-        session_date,
+        appointment_id,
+        start_time,
+        end_time,
         notes,
-        diagnosis,
-        recommendations,
+        follow_up_required,
         created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, NOW())
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
     `, [
       student_id,
       /* TODO: Get counselor_id from session */1,
-      session_date,
+      appointment_id,
+      start_time,
+      end_time,
       notes,
-      diagnosis,
-      recommendations
+      follow_up_required || false
     ]);
 
     return NextResponse.json({
@@ -65,13 +86,20 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const { session_id, notes, diagnosis, recommendations } = await request.json();
+    const { 
+      session_id, 
+      notes, 
+      follow_up_required,
+      end_time 
+    } = await request.json();
 
     const [result] = await pool.execute<mysql.ResultSetHeader>(
-      `UPDATE sessions 
-       SET notes = ?, diagnosis = ?, recommendations = ?
+      `UPDATE SESSION 
+       SET notes = ?,
+           follow_up_required = ?,
+           end_time = ?
        WHERE session_id = ? AND counselor_id = ?`,
-      [notes, diagnosis, recommendations, session_id, /* TODO: Get counselor_id from session */1]
+      [notes, follow_up_required, end_time, session_id, /* TODO: Get counselor_id from session */1]
     );
 
     if (result.affectedRows === 0) {
