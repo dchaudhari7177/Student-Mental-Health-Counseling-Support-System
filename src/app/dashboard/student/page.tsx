@@ -153,21 +153,21 @@ export default function StudentDashboard() {
           </Link>
 
           <Link
+            href="/student/sessions"
+            className="bg-indigo-600 text-white p-6 rounded-lg hover:bg-indigo-700 transition-colors text-center"
+          >
+            <div className="text-3xl mb-2">📝</div>
+            <h3 className="font-semibold">My Sessions</h3>
+            <p className="text-sm opacity-90">View session notes</p>
+          </Link>
+
+          <Link
             href="/student/resources"
             className="bg-purple-600 text-white p-6 rounded-lg hover:bg-purple-700 transition-colors text-center"
           >
             <div className="text-3xl mb-2">📚</div>
             <h3 className="font-semibold">Resources</h3>
             <p className="text-sm opacity-90">Mental health materials</p>
-          </Link>
-
-          <Link
-            href="/student/feedback"
-            className="bg-orange-600 text-white p-6 rounded-lg hover:bg-orange-700 transition-colors text-center"
-          >
-            <div className="text-3xl mb-2">💬</div>
-            <h3 className="font-semibold">Feedback</h3>
-            <p className="text-sm opacity-90">Rate your sessions</p>
           </Link>
         </div>
 

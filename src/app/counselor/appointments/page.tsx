@@ -2,6 +2,13 @@
 
 import { useEffect, useState } from 'react';
 
+interface User {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+}
+
 interface Appointment {
   appointment_id: number;
   appointment_date: string;
@@ -10,28 +17,54 @@ interface Appointment {
   status: 'Pending' | 'Confirmed' | 'Completed' | 'Cancelled' | 'Rejected';
   student_name: string;
   student_email: string;
+  student_id: number;
+  counselor_id: number;
+}
+
+interface SessionData {
+  notes: string;
+  diagnosis: string;
+  observations: string;
+  follow_up_required: boolean;
 }
 
 export default function ManageAppointments() {
+  const [user, setUser] = useState<User | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+  const [sessionData, setSessionData] = useState<SessionData>({
+    notes: '',
+    diagnosis: '',
+    observations: '',
+    follow_up_required: false
+  });
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    const fetchAppointments = async () => {
-      try {
-        const response = await fetch('/api/appointments/counselor');
-        if (!response.ok) throw new Error('Failed to fetch appointments');
-        const data = await response.json();
-        setAppointments(data);
-      } catch (error) {
-        console.error('Error:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchAppointments();
+    const userData = localStorage.getItem('user');
+    if (userData) {
+      const parsedUser = JSON.parse(userData);
+      setUser(parsedUser);
+      fetchAppointments(parsedUser.id);
+    } else {
+      setLoading(false);
+    }
   }, []);
+
+  const fetchAppointments = async (counselorId: number) => {
+    try {
+      const response = await fetch(`/api/appointments/counselor?counselor_id=${counselorId}`);
+      if (!response.ok) throw new Error('Failed to fetch appointments');
+      const data = await response.json();
+      setAppointments(data);
+    } catch (error) {
+      console.error('Error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleStatusUpdate = async (appointmentId: number, newStatus: string) => {
     try {
@@ -42,14 +75,97 @@ export default function ManageAppointments() {
       });
 
       if (!response.ok) throw new Error('Failed to update status');
-
-      // Refresh appointments list
-      const updatedResponse = await fetch('/api/appointments/counselor');
-      if (!updatedResponse.ok) throw new Error('Failed to fetch appointments');
-      const data = await updatedResponse.json();
-      setAppointments(data);
+      if (user) await fetchAppointments(user.id);
     } catch (error) {
       console.error('Error:', error);
+      alert('Failed to update appointment status');
+    }
+  };
+
+  const openCompletionModal = (appointment: Appointment) => {
+    setSelectedAppointment(appointment);
+    setSessionData({
+      notes: '',
+      diagnosis: '',
+      observations: '',
+      follow_up_required: false
+    });
+    setShowModal(true);
+  };
+
+  const handleCompleteAppointment = async () => {
+    if (!selectedAppointment) return;
+
+    setSubmitting(true);
+    try {
+      const userData = localStorage.getItem('user');
+      const counselorId = userData ? JSON.parse(userData).id : 2;
+
+      // Update appointment status to Completed
+      const updateResponse = await fetch('/api/appointments/counselor', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          appointment_id: selectedAppointment.appointment_id, 
+          status: 'Completed' 
+        }),
+      });
+
+      if (!updateResponse.ok) throw new Error('Failed to update appointment');
+
+      // Create session record
+      // Format start_time properly (convert ISO date to YYYY-MM-DD format)
+      const appointmentDate = new Date(selectedAppointment.appointment_date);
+      const formattedDate = appointmentDate.toISOString().split('T')[0];
+      const startTime = `${formattedDate} ${selectedAppointment.appointment_time}`;
+      const endTime = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+      const sessionResponse = await fetch('/api/sessions/counselor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          appointment_id: selectedAppointment.appointment_id,
+          student_id: selectedAppointment.student_id,
+          counselor_id: counselorId,
+          start_time: startTime,
+          end_time: endTime,
+          notes: sessionData.notes,
+          follow_up_required: sessionData.follow_up_required
+        }),
+      });
+
+      if (!sessionResponse.ok) throw new Error('Failed to create session');
+
+      // Create mental health record if diagnosis or observations provided
+      if (sessionData.diagnosis || sessionData.observations) {
+        const recordResponse = await fetch('/api/mental-health-records', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            student_id: selectedAppointment.student_id,
+            counselor_id: counselorId,
+            record_date: new Date().toISOString().split('T')[0],
+            diagnosis: sessionData.diagnosis,
+            observations: sessionData.observations,
+            summary: sessionData.notes
+          }),
+        });
+
+        if (!recordResponse.ok) {
+          console.error('Failed to create mental health record');
+        }
+      }
+
+      // Close modal and refresh
+      setShowModal(false);
+      setSelectedAppointment(null);
+      if (user) await fetchAppointments(user.id);
+      alert('Appointment completed successfully!');
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Failed to complete appointment. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -128,10 +244,10 @@ export default function ManageAppointments() {
                   )}
                   {appointment.status === 'Confirmed' && (
                     <button
-                      onClick={() => handleStatusUpdate(appointment.appointment_id, 'Completed')}
+                      onClick={() => openCompletionModal(appointment)}
                       className="mt-4 bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
                     >
-                      Mark as Completed
+                      Complete Appointment
                     </button>
                   )}
                 </li>
@@ -139,6 +255,94 @@ export default function ManageAppointments() {
             </ul>
           </div>
         )}
+
+        {/* Completion Modal */}
+        {showModal && selectedAppointment && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <h2 className="text-2xl font-bold mb-4">Complete Appointment</h2>
+              <p className="text-gray-600 mb-6">
+                Patient: <span className="font-semibold">{selectedAppointment.student_name}</span>
+              </p>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Session Notes *
+                  </label>
+                  <textarea
+                    value={sessionData.notes}
+                    onChange={(e) => setSessionData({ ...sessionData, notes: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    rows={4}
+                    placeholder="Enter session notes..."
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Diagnosis
+                  </label>
+                  <textarea
+                    value={sessionData.diagnosis}
+                    onChange={(e) => setSessionData({ ...sessionData, diagnosis: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    rows={3}
+                    placeholder="Enter diagnosis (optional)..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Observations
+                  </label>
+                  <textarea
+                    value={sessionData.observations}
+                    onChange={(e) => setSessionData({ ...sessionData, observations: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    rows={3}
+                    placeholder="Enter observations (optional)..."
+                  />
+                </div>
+
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="follow_up"
+                    checked={sessionData.follow_up_required}
+                    onChange={(e) => setSessionData({ ...sessionData, follow_up_required: e.target.checked })}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <label htmlFor="follow_up" className="ml-2 block text-sm text-gray-900">
+                    Follow-up required
+                  </label>
+                </div>
+              </div>
+
+              <div className="mt-6 flex gap-3">
+                <button
+                  onClick={handleCompleteAppointment}
+                  disabled={submitting || !sessionData.notes}
+                  className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {submitting ? 'Completing...' : 'Complete Appointment'}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowModal(false);
+                    setSelectedAppointment(null);
+                  }}
+                  disabled={submitting}
+                  className="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-400 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
+}

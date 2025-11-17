@@ -16,12 +16,22 @@ interface Appointment {
 export default function StudentAppointments() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<any>(null);
   const router = useRouter();
 
   useEffect(() => {
+    // Get user from localStorage
+    const userData = localStorage.getItem('user');
+    if (!userData) {
+      router.push('/auth/login');
+      return;
+    }
+    const parsedUser = JSON.parse(userData);
+    setUser(parsedUser);
+
     const fetchAppointments = async () => {
       try {
-        const response = await fetch('/api/appointments/student');
+        const response = await fetch(`/api/appointments/student?studentId=${parsedUser.id}`);
         if (!response.ok) {
           throw new Error('Failed to fetch appointments');
         }
@@ -35,7 +45,7 @@ export default function StudentAppointments() {
     };
 
     fetchAppointments();
-  }, []);
+  }, [router]);
 
   const getStatusColor = (status: string) => {
     const colors = {

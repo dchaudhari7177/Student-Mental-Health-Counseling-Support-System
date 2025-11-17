@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import mysql from 'mysql2/promise';
 
 const dbConfig = {
@@ -16,18 +16,23 @@ const dbConfig = {
 
 const pool = mysql.createPool(dbConfig);
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const studentId = searchParams.get('studentId') || '3'; // Default to 3 for testing
+
     const [appointments] = await pool.query(`
       SELECT 
         a.*,
         c.name as counselor_name,
-        c.email as counselor_email
+        c.email as counselor_email,
+        s.name as specialization
       FROM APPOINTMENT a
       JOIN COUNSELOR c ON a.counselor_id = c.counselor_id
+      LEFT JOIN SPECIALIZATION s ON c.specialization_id = s.specialization_id
       WHERE a.student_id = ?
       ORDER BY a.appointment_date DESC, a.appointment_time DESC
-    `, [1]); // TODO: Replace with actual student_id from session
+    `, [parseInt(studentId)]);
 
     return NextResponse.json(appointments);
   } catch (error) {
@@ -39,14 +44,21 @@ export async function GET() {
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const { counselor_id, appointment_date, appointment_time, mode } = await request.json();
+    const { student_id, counselor_id, appointment_date, appointment_time, mode } = await request.json();
 
     const [result] = await pool.execute<mysql.ResultSetHeader>(
       `INSERT INTO APPOINTMENT (student_id, counselor_id, appointment_date, appointment_time, mode, status, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, 'Pending', NOW(), NOW())`,
-      [1, counselor_id, appointment_date, appointment_time, mode] // TODO: Replace 1 with actual student_id from session
+      [student_id || 3, counselor_id, appointment_date, appointment_time, mode]
+    );
+
+    // Create notification for counselor
+    await pool.execute(
+      `INSERT INTO NOTIFICATION (user_id, user_role, message, sent_at, read_status)
+       VALUES (?, 'Counselor', ?, NOW(), FALSE)`,
+      [counselor_id, `New appointment request for ${appointment_date} at ${appointment_time}`]
     );
 
     return NextResponse.json({

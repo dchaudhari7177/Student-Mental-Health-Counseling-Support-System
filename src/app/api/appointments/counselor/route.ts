@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import mysql from 'mysql2/promise';
 
 const dbConfig = {
@@ -16,8 +16,11 @@ const dbConfig = {
 
 const pool = mysql.createPool(dbConfig);
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const counselorId = searchParams.get('counselor_id') || '1';
+
     const [appointments] = await pool.query(`
       SELECT 
         a.*,
@@ -27,7 +30,7 @@ export async function GET() {
       JOIN STUDENT s ON a.student_id = s.student_id
       WHERE a.counselor_id = ?
       ORDER BY a.appointment_date DESC
-    `, [/* TODO: Get counselor_id from session */1]);
+    `, [counselorId]);
 
     return NextResponse.json(appointments);
   } catch (error) {
